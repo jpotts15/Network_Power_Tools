@@ -196,6 +196,14 @@ def networkpowertools_frontend():
         st.write("Devices:")
         st.json(st.session_state.devices)
 
+        if st.button('Generate Network Diagram'):
+            # This function should generate the Pyvis network diagram and return its HTML
+            diagram_html = generate_graph_from_devices(st.session_state.devices)
+            html(diagram_html, width=800, height=600)
+        else:
+            st.write('Upload devices and interfaces to see the network diagram.')
+
+
     elif st.session_state.page == "Remote Ping":
         st.title('Remote Ping')
 
@@ -239,6 +247,9 @@ def networkpowertools_frontend():
                 st.json(st.session_state.ping_output)
             else:
                 st.warning("Please enter a valid IP address.")
+
+    elif st.session_state.page("Super Ping"):
+        pass
 
 
 if __name__ == '__main__':
