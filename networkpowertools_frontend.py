@@ -1,7 +1,8 @@
 import streamlit as st
 from networkpowertools_functions import (process_input_file, send_commands_to_devices,
                                         save_dictionary, generate_graph_from_devices,
-                                        import_devices_from_csv, import_devices_from_json)
+                                        import_devices_from_csv, import_devices_from_json,
+                                         parse_traceroute_output)
 from streamlit.components.v1 import html
 
 
@@ -23,8 +24,20 @@ def networkpowertools_frontend():
     if 'page' not in st.session_state:
         st.session_state.page = 'Home'
 
-    if 'st.session_state.todo' not in st.session_state:
+    if 'todo' not in st.session_state:
         st.session_state.todo = ''
+
+    if 'ping_output' not in st.session_state:
+        st.session_state.ping_output = ''
+
+    if 'traceroute_output' not in st.session_state:
+        st.session_state.traceroute_output = ''
+
+    if "traceroute_processed_output" in st.session_state:
+        st.session_state.traceroute_processed_output = {}
+
+    if "traceroute_hop_ping" in st.session_state:
+        st.session_state.traceroute_hop_ping = {}
 
     # Examples
     device_format_example = """
@@ -204,11 +217,9 @@ def networkpowertools_frontend():
             st.write('Upload devices and interfaces to see the network diagram.')
 
 
+
     elif st.session_state.page == "Remote Ping":
         st.title('Remote Ping')
-
-        st.title('Network Device Manager')
-
         # Upload file for devices
         devices_file = st.file_uploader("Upload your devices file (CSV/JSON)", type=['csv', 'json'])
         show_device_format = st.checkbox('Show expected format for devices')
@@ -217,28 +228,27 @@ def networkpowertools_frontend():
         if devices_file:
             st.session_state.devices = process_input_file(devices_file, import_devices_from_csv,
                                                           import_devices_from_json)
-
-          # Display devices, interfaces, and commands
+            st.write("Devices loaded successfully!")
+        else:
+            st.warning("Please upload a valid devices file to proceed.")
+        # Display devices, interfaces, and commands
         st.write("Devices:")
         st.json(st.session_state.devices)
-
         override_user_pw = st.checkbox('Override Username and Password?')
         if override_user_pw:
             # Field to override username and password in an obfuscated manner
             st.subheader("Credentials Override")
             override_username = st.text_input("Override Username:", value="")
             override_password = st.text_input("Override Password:", value="", type="password")
-
             # If the fields are filled, update the st.session_state.devices dictionary
             if override_username and override_password:
                 for device in st.session_state.devices.values():
                     device["username"] = override_username
                     device["password"] = override_password
-
+                st.success("Credentials overridden successfully!")
         # Get the IP address to be pinged from the user
         target_ip = st.text_input("Enter the IP address to ping:")
-
-        if st.button('Ping'):
+        if devices_file and st.button('Ping'):
             # Check if the IP is valid before sending it out
             if target_ip:
                 ping_command = f"ping {target_ip}"
@@ -247,6 +257,36 @@ def networkpowertools_frontend():
                 st.json(st.session_state.ping_output)
             else:
                 st.warning("Please enter a valid IP address.")
+        if devices_file and st.button('Traceroute'):
+            # Check if the IP is valid before sending it out
+            if target_ip:
+                traceroute_command = f"traceroute {target_ip}"
+                st.session_state.traceroute_output = send_commands_to_devices([traceroute_command],
+                                                                              st.session_state.devices)
+                st.write("Traceroute Results:")
+                st.json(st.session_state.traceroute_output)
+            else:
+                st.warning("Please enter a valid IP address.")
+
+        if target_ip and st.session_state.traceroute_output:
+            for device_ip, output in st.session_state.traceroute_output.items():
+                selected_device_ip = st.selectbox("Traceroute select", [device_ip])
+                parsed_outputs, traceroute_hops = parse_traceroute_output(selected_device_ip, target_ip, output)
+                st.write("Traceroute parsed Results:")
+                st.json(parsed_outputs)
+                st.json(traceroute_hops)
+                st.write("Ping all hops in traceroute?")
+                if st.button(f"Traceroute ping {selected_device_ip}"):
+                    hop_ping_outputs = {}
+                    for hop_ip in parsed_outputs[selected_device_ip][target_ip]:
+                        ping_command = f"ping {hop_ip}"
+                        devices = {selected_device_ip: st.session_state.devices[selected_device_ip]}
+                        hop_ping_outputs[hop_ip] = send_commands_to_devices([ping_command], devices)
+                    st.session_state.traceroute_hop_ping = hop_ping_outputs
+                    st.json(st.session_state.traceroute_hop_ping)
+
+
+
 
     elif st.session_state.page("Super Ping"):
         pass

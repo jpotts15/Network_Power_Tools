@@ -3,6 +3,7 @@ import json
 import csv
 from pyvis.network import Network
 import os
+import re
 
 '''
 This python script is meant to house modules for the networkpowertools 
@@ -71,7 +72,7 @@ def send_commands_to_devices(devices, commands):
     - commands (list): List of commands to send.
 
     Returns:
-    - dict: Dictionary with device names as keys and command outputs as values.
+    - results: output of commands
     """
     results = {}
 
@@ -305,3 +306,34 @@ def import_interfaces_from_json(filename, devices):
                 devices[device_name]['interfaces'][interface] = neighbor
 
     return devices
+
+
+def parse_traceroute_output(device_ip, target_ip, output):
+    """Parse the output of a traceroute command."""
+    # Split the traceroute output by lines
+    lines = output.split("\n")
+
+    # Regular expression pattern to capture IP addresses
+    ip_pattern = re.compile(r"\b(?:[0-9]{1,3}\.){3}[0-9]{1,3}\b")
+
+    # List to store IPs from traceroute
+    route_ips = []
+    traceroute_dict = {}
+    hop_counter = 0
+
+    # Loop through each line and capture IPs
+    for line in lines:
+        match = ip_pattern.search(line)
+        if match:
+            ip = match.group()
+            if ip not in route_ips:
+                route_ips.add(ip)
+            hop_counter += 1
+            traceroute_dict[hop_counter] = ip
+        elif "* * *" in line:
+            hop_counter += 1
+            traceroute_dict[hop_counter] = "no reply"
+
+    # Return the result in the desired format
+    return {device_ip: {target_ip: route_ips}}, traceroute_dict
+
