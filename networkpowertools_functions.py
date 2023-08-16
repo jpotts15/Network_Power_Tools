@@ -418,7 +418,6 @@ def bootstrap_telnet(devices):
 def handle_telnet_prompt(tn, username, password):
     loopcounter = 0
     prompt = tn.read_very_eager().decode('ascii').split("\n")[-1]
-    print("inital prompt: " + prompt)
     time.sleep(5)
 
     # Add some handling for initial prompts
@@ -426,7 +425,6 @@ def handle_telnet_prompt(tn, username, password):
         tn.write(b"\r\n")
         time.sleep(1)
         prompt = tn.read_very_eager().decode('ascii').split("\n")[-1]
-        print("Prompt loop: " + prompt)
         time.sleep(2)
 
         if prompt == "":
@@ -440,7 +438,6 @@ def handle_telnet_prompt(tn, username, password):
         elif "Press ENTER to get the prompt" in prompt.lower():
             tn.write(b"\r\n")
         else:
-            print('something else')
             tn.write(b"\r\n")
         loopcounter += 1
 
