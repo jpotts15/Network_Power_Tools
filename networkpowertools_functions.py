@@ -4,6 +4,8 @@ import csv
 from pyvis.network import Network
 import os
 import re
+import telnetlib
+import time
 
 '''
 This python script is meant to house modules for the networkpowertools 
@@ -337,3 +339,109 @@ def parse_traceroute_output(device_ip, target_ip, output):
     # Return the result in the desired format
     return {device_ip: {target_ip: route_ips}}, traceroute_dict
 
+
+def bootstrap_telnet(devices):
+    """
+    Connect to devices using telnet and execute commands.
+
+    Args:
+    - devices (list): List of dictionaries containing device details.
+    - telnet_ports (dict): Dictionary containing telnet ports mapped to device hosts.
+    - commands (dict): Dictionary mapping device hosts to lists of commands to be executed.
+
+    Returns:
+    - Dictionary containing output for each command executed.
+
+    Input Format:
+    devices = [
+    {
+        "device_name": "device1",
+        "device_type": "cisco_ios",
+        "host": "192.168.2.181",
+        "username": "admin",
+        "password": "adminpass",
+        "telnet_port" : 3223,
+        "device_commands" : ["show interfaces", "show version"]
+    },
+    {
+        "device_name": "device2",
+        "device_type": "cisco_ios",
+        "host": "192.168.2.182",
+        "username": "admin",
+        "password": "adminpass"
+        "telnet_port" : 23,
+        "device_commands" : ["show interfaces", "show ip route"]
+    }
+    ]
+    """
+
+    results = {}
+    prompt = ""
+    loopcounter = 0
+
+    for device in devices:
+        device_name = device["device_name"]
+        host = device["host"]
+        username = device["username"]
+        password = device["password"]
+        telnet_port = device["telnet_port"]
+        device_commands = device["device_commands"]
+        ipport = f"{host}:{telnet_port}"
+
+        # Create an initial Telnet connection
+        tn = telnetlib.Telnet(host, telnet_port)  # default port is 23
+        tn = handle_telnet_prompt(tn, username, password)
+
+        # Handling device-specific commands
+        device_output = {}
+
+        for cmd in device_commands:
+            retry_count = 0
+            while retry_count < 3:
+                tn.write(cmd.encode('ascii') + b"\r\n")
+                # Assuming a simple sleep is enough for the command to be executed and output to be shown
+                time.sleep(1)
+                output = tn.read_very_eager().decode('ascii')
+                if cmd in output:
+                    device_output[cmd] = output.strip()
+                    break
+                if "--More--" in output:
+                    tn.write("     ".encode('ascci')+b"\r\n")
+                retry_count += 1
+
+        results[ipport] = device_output
+        tn.close()
+
+    return results
+
+
+def handle_telnet_prompt(tn, username, password):
+    loopcounter = 0
+    prompt = tn.read_very_eager().decode('ascii').split("\n")[-1]
+    print("inital prompt: " + prompt)
+    time.sleep(5)
+
+    # Add some handling for initial prompts
+    while ">" not in prompt and "#" not in prompt and loopcounter < 10:
+        tn.write(b"\r\n")
+        time.sleep(1)
+        prompt = tn.read_very_eager().decode('ascii').split("\n")[-1]
+        print("Prompt loop: " + prompt)
+        time.sleep(2)
+
+        if prompt == "":
+            continue
+        elif "initial" in prompt or "Please answer 'yes' or 'no'" in prompt:
+            tn.write("no".encode('ascii') + b"\r\n")
+        elif "username" in prompt.lower():
+            tn.write(username.encode('ascii') + b"\r\n")
+        elif "password" in prompt.lower():
+            tn.write(password.encode('ascii') + b"\r\n")
+        elif "Press ENTER to get the prompt" in prompt.lower():
+            tn.write(b"\r\n")
+        else:
+            print('something else')
+            tn.write(b"\r\n")
+        loopcounter += 1
+
+    return tn

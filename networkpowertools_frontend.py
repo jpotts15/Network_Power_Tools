@@ -2,8 +2,9 @@ import streamlit as st
 from networkpowertools_functions import (process_input_file, send_commands_to_devices,
                                         save_dictionary, generate_graph_from_devices,
                                         import_devices_from_csv, import_devices_from_json,
-                                         parse_traceroute_output)
+                                         parse_traceroute_output, bootstrap_telnet)
 from streamlit.components.v1 import html
+import json
 
 
 
@@ -110,7 +111,7 @@ def networkpowertools_frontend():
     st.sidebar.title("Network Power Tools")
 
     page_list = [
-        "Home", "Multi-send without Checks", "Network Diagram", "Remote Ping"]
+        "Home", "Multi-send without Checks", "Network Diagram", "Remote Ping", "Super Ping", "Bootstrap Device"]
 
     for p in page_list:
         if st.sidebar.button(p):
@@ -288,8 +289,104 @@ def networkpowertools_frontend():
 
 
 
-    elif st.session_state.page("Super Ping"):
+    elif st.session_state.page == "Super Ping":
+        st.title("Super Ping")
         pass
+
+    elif st.session_state.page == "Bootstrap Device":
+        st.title('Device Bootstrapper')
+
+        # Bootstrap by Telnet
+        with st.expander('Bootstrap by Telnet'):
+            st.subheader('Telnet Command Sender')
+
+            input_type = st.radio('Choose input method:', ['Manual Entry', 'Upload'])
+
+            if input_type == 'Manual Entry':
+                num_devices = st.slider('Select number of devices:', 1, 10)
+
+                devices = []
+                telnet_ports = []
+                commands = {}
+
+                for i in range(num_devices):
+                    st.subheader(f'Device {i + 1}')
+                    host = st.text_input(f'Host for Device {i + 1}')
+                    port = st.number_input(f'Telnet Port for Device {i + 1}', min_value=1, max_value=65535, value=23)
+                    cmd_input = st.text_area(f'Commands for Device {i + 1} (comma-separated)')
+
+                    # Convert comma-separated commands into a list
+                    cmd_list = [cmd.strip() for cmd in cmd_input.split(",")]
+
+                    devices.append({
+                        "device_name": f"device{i + 1}",
+                        "device_type": "cisco_ios",  # This can be adjusted as needed
+                        "host": host,
+                        "username": "admin",  # Placeholder - can be changed
+                        "password": "adminpass",  # Placeholder - can be changed
+                        "telnet_port" : port,
+
+                        "device_commands" : cmd_list
+                    })
+
+            else:
+                # Upload for devices
+                devices_file = st.file_uploader("Upload your devices file (CSV/JSON)", type=['csv', 'json'])
+                if devices_file:
+                    if devices_file.type == 'application/json':
+                        devices = import_devices_from_json(devices_file)
+                    else:
+                        devices = import_devices_from_csv(devices_file)
+
+                # Upload for commands
+                commands_file = st.file_uploader("Upload your commands file (JSON)", type=['json'])
+                if commands_file:
+                    commands = json.load(commands_file)
+
+                # Upload for telnet ports
+                telnet_ports_file = st.file_uploader("Upload your telnet ports file (JSON)", type=['json'])
+                if telnet_ports_file:
+                    telnet_ports = json.load(telnet_ports_file)
+
+            # Displaying the user input
+            st.subheader('Inputs')
+            st.write("Devices:")
+            st.json(devices)
+
+            if st.button('Send Commands via Telnet'):
+                result = bootstrap_telnet(devices)
+                st.subheader('Command Results')
+                st.json(result)
+
+        # Bootstrap by SSH
+        with st.expander('Bootstrap by SSH'):
+            # The code to use the send_commands_to_devices function will be placed here.
+            # For example:
+            devices_file = st.file_uploader("Upload your SSH devices file (CSV/JSON)", type=['csv', 'json'])
+            commands_file = st.file_uploader("Upload your SSH commands file (JSON)", type=['json'])
+
+            # Displaying the user input
+            st.subheader('Inputs for SSH')
+            if devices_file and commands_file:
+                devices = import_devices_from_json(
+                    devices_file) if devices_file.type == 'application/json' else import_devices_from_csv(devices_file)
+                commands = json.load(commands_file)
+
+                st.write("Devices for SSH:")
+                st.json(devices)
+                st.write("Commands for SSH:")
+                st.json(commands)
+
+                if st.button('Send Commands via SSH'):
+                    ssh_results = send_commands_to_devices(commands, devices)
+                    st.subheader('SSH Command Results')
+                    st.json(ssh_results)
+
+        # Send Commands by API
+        with st.expander('Send Commands by API'):
+            st.subheader("Send command by API")
+            # Placeholder for future development
+            pass
 
 
 if __name__ == '__main__':
